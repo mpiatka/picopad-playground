@@ -1,6 +1,6 @@
 // Experimental FULL GBC support
 #ifndef PEANUT_FULL_GBC_SUPPORT
-	#define PEANUT_FULL_GBC_SUPPORT 0
+	#define PEANUT_FULL_GBC_SUPPORT 1
 #endif
 #if PEANUT_FULL_GBC_SUPPORT
 // Disable sound
@@ -34,7 +34,8 @@
 #include "picopad_init.h"
 #include "picopad_key.h"
 #include "sdk_watchdog.h"
-#include "lib_pwmsnd.h"
+
+#include "pioaudio.h"
 
 // Button GPIO mapping
 #define GPIO_BUTTON_UP        4 // UP
@@ -47,9 +48,11 @@
 #define GPIO_BUTTON_START     9 // X
 
 #if ENABLE_SOUND
+PioaudioCtx pioaudioCtx;
 int16_t *stream;
+uint8_t *monoStream;
+float volume = 0.25f;
 #endif
-
 // ROM data
 extern const unsigned char gameRom[];
 
@@ -256,17 +259,10 @@ int main() {
     DeviceInit(true, false);
 
 #if ENABLE_SOUND
-    PWMSndTerm();
-    //  266 MHz: 266000000/5644800 = 47.123, INT=47, FRAC=2,
-    //  real sample rate = 266000000/(47+2/16)/256 = 22049Hz
-    PWMSndInitInternal(47, 2);
     stream = static_cast<int16_t *>(malloc(AUDIO_BUFFER_SIZE_BYTES));
     assert(stream != nullptr);
     memset(stream, 0, AUDIO_BUFFER_SIZE_BYTES);  // Zero out the stream buffer
-    // Allocate space for the mono and resampled stream.
-    // We're assuming AUDIO_SAMPLES is the total number of samples in both channels.
-    auto *monoStream = new uint8_t[AUDIO_SAMPLES];
-    static uint16_t samplesCount = 0;
+	monoStream = new uint8_t[AUDIO_SAMPLES];
 #endif
 
     // Main game loop
@@ -286,6 +282,7 @@ int main() {
         // You should change based on ROM
 #if PEANUT_FULL_GBC_SUPPORT
         if (gbContext.cgb.cgbMode)
+            //gbContext.direct.frame_skip = 1;
             gbContext.direct.interlace = 1;
         else {
             gbContext.direct.frame_skip = 1;
@@ -300,7 +297,8 @@ int main() {
 
 #if ENABLE_SOUND
         // Init audio
-        audio_init();
+        //audio_init();
+		pioaudio_init(&pioaudioCtx);
 #endif
         // Frame count variable
         uint_fast32_t frameCount = 0;
@@ -314,29 +312,22 @@ int main() {
             frameCount++;
 
 #if ENABLE_SOUND
-            if (!PlayingSound()) {
-                memset(monoStream, 0, AUDIO_SAMPLES);  // Zero out the stream buffer
-                samplesCount = audio_callback(nullptr, stream, AUDIO_BUFFER_SIZE_BYTES);
+            if (true) {
+				audio_callback(nullptr, stream, AUDIO_BUFFER_SIZE_BYTES);
 
-                int j = 0;
-                int32_t mono16BitFiltered = 0;
-                for (int i = 0; i < AUDIO_BUFFER_SIZE_BYTES / 2; i += 2) {
-                    int32_t leftChannel = stream[i];
-                    int32_t rightChannel = stream[i + 1];
-
-                    // Average left and right channels to create mono channel.
-                    int32_t mono16Bit = (leftChannel + rightChannel) / 2;
-
-                    // Apply a simple low-pass filter (moving average).
-                    mono16BitFiltered = (mono16BitFiltered + mono16Bit) / 2;
-
-                    // Convert to 8 bits by dropping the least significant 8 bits.
-                    monoStream[j] = static_cast<uint8_t>((mono16BitFiltered + 128) >> 8);
-                    j++;
-                }
-                // Now monoStream contains the 8-bit mono and resampled audio.
-                PlaySound(monoStream, AUDIO_SAMPLES);
-            }
+				int32_t leftChannel, rightChannel;
+				for (int i = 0; i < AUDIO_SAMPLES; i++) {
+					leftChannel = stream[2*i];
+					rightChannel = stream[2*i + 1];
+					// Convert to mono 16bit and apply gain factor
+					auto monoSample = static_cast<int32_t>(((leftChannel + rightChannel) / 2));
+					// Clip the value to the range of a 8-bit unsigned integer
+					monoSample += -INT16_MIN;
+					monoSample = MIN(monoSample, UINT16_MAX);
+					monoStream[i] = static_cast<uint8_t>(monoSample >> 8);
+				}
+				pioaudio_play(&pioaudioCtx, monoStream, AUDIO_SAMPLES);
+		}
 #endif
             // Update gamepad state
             prevGamepadState.up = gbContext.direct.joypad_bits.up;
@@ -358,7 +349,7 @@ int main() {
             gbContext.direct.joypad_bits.start = gpio_get(GPIO_BUTTON_START);
 			gbContext.direct.joypad_bits.select = gpio_get(GPIO_BUTTON_SELECT);
 
-        } while (!(gbContext.direct.joypad_bits.a == 0 && gbContext.direct.joypad_bits.b == 0));
+        } while (true);
 
         // Reset core1 and reset to bootloader
         multicore_reset_core1();
