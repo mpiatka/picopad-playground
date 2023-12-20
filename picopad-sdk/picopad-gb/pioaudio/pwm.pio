@@ -1,0 +1,26 @@
+;
+; Copyright (c) 2020 Raspberry Pi (Trading) Ltd.
+;
+; SPDX-License-Identifier: BSD-3-Clause
+;
+
+; Side-set pin 0 is used for PWM output
+
+; Each sample output should take 260*4 cycles
+
+.program pwm
+.side_set 1 opt
+
+	nop             side 0
+    pull ifempty block
+    out x, 8        side 0 ; Current audio sample
+    mov y, isr             ; PWM period. 4 cycles per sample fetch + 259*4 loop cycles
+
+;Loop takes 4 cycles
+countloop:
+    jmp x!=y noset         ; Set pin high if X == Y, keep the two paths length matched
+    jmp skip        side 1
+noset:
+    nop                    ; Single dummy cycle to keep the two paths the same length
+skip:
+    jmp y-- countloop  [1] ; Loop until Y hits 0, then pull a fresh PWM value from FIFO
