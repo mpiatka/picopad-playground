@@ -50,7 +50,7 @@
 #if ENABLE_SOUND
 PioaudioCtx pioaudioCtx;
 int16_t *stream;
-uint8_t *monoStream;
+alignas(4) uint8_t monoStream[AUDIO_SAMPLES];
 float volume = 0.25f;
 #endif
 // ROM data
@@ -262,7 +262,6 @@ int main() {
     stream = static_cast<int16_t *>(malloc(AUDIO_BUFFER_SIZE_BYTES));
     assert(stream != nullptr);
     memset(stream, 0, AUDIO_BUFFER_SIZE_BYTES);  // Zero out the stream buffer
-	monoStream = new uint8_t[AUDIO_SAMPLES];
 #endif
 
     // Main game loop
@@ -315,12 +314,10 @@ int main() {
             if (true) {
 				audio_callback(nullptr, stream, AUDIO_BUFFER_SIZE_BYTES);
 
-				int32_t leftChannel, rightChannel;
+				pioaudio_wait(&pioaudioCtx);
 				for (int i = 0; i < AUDIO_SAMPLES; i++) {
-					leftChannel = stream[2*i];
-					rightChannel = stream[2*i + 1];
 					// Convert to mono 16bit and apply gain factor
-					auto monoSample = static_cast<int32_t>(((leftChannel + rightChannel) / 2));
+					int32_t monoSample = stream[i];
 					// Clip the value to the range of a 8-bit unsigned integer
 					monoSample += -INT16_MIN;
 					monoSample = MIN(monoSample, UINT16_MAX);
