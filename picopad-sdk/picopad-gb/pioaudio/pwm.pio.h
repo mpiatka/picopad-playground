@@ -18,7 +18,7 @@
 static const uint16_t pwm_program_instructions[] = {
             //     .wrap_target
     0xb042, //  0: nop                    side 0     
-    0x80e0, //  1: pull   ifempty block              
+    0x80c0, //  1: pull   ifempty noblock            
     0x7028, //  2: out    x, 8            side 0     
     0xa046, //  3: mov    y, isr                     
     0x00a6, //  4: jmp    x != y, 6                  

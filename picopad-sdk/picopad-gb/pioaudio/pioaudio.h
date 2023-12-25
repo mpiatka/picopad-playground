@@ -7,6 +7,7 @@ extern "C" {
 #endif
 
 #include <hardware/pio.h>
+#include <hardware/dma.h>
 #define PIO_AUDIO_PIN 15;
 
 
@@ -20,6 +21,10 @@ struct PioaudioCtx{
 void pioaudio_init(struct PioaudioCtx *c);
 
 void pioaudio_play(struct PioaudioCtx *c, void *buf, uint len);
+
+static inline void pioaudio_wait(struct PioaudioCtx *c){
+	dma_channel_wait_for_finish_blocking(c->dma_ch);
+}
 
 #ifdef __cplusplus
 }
