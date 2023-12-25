@@ -12,7 +12,7 @@
 #include "minigb_apu.h"
 
 #define DMG_CLOCK_FREQ_U  ((unsigned)DMG_CLOCK_FREQ)
-#define AUDIO_NSAMPLES    (AUDIO_SAMPLES * 2u)
+#define AUDIO_NSAMPLES    (AUDIO_SAMPLES)
 
 #define AUDIO_MEM_SIZE    (0xFF3F - 0xFF10 + 1)
 #define AUDIO_ADDR_COMPENSATION  0xFF10
@@ -189,7 +189,7 @@ static void update_square(int16_t *samples, const bool ch2) {
 	set_note_freq(c, freq);
 	c->freq_inc *= 8;
 
-	for (uint_fast16_t i = 0; i < AUDIO_NSAMPLES; i += 2) {
+	for (uint_fast16_t i = 0; i < AUDIO_NSAMPLES; i++) {
 		update_len(c);
 
 		if (!c->enabled)
@@ -217,10 +217,9 @@ static void update_square(int16_t *samples, const bool ch2) {
 
 		sample += c->val;
 		sample *= c->volume;
-		sample /= 4;
+		sample /= 8;
 
-		samples[i + 0] += sample * c->on_left * vol_l;
-		samples[i + 1] += sample * c->on_right * vol_r;
+		samples[i] += sample * c->on_left * vol_l + sample * c->on_right * vol_r;
 	}
 }
 
@@ -248,7 +247,7 @@ static void update_wave(int16_t *samples) {
 
 	c->freq_inc *= 32;
 
-	for (uint_fast16_t i = 0; i < AUDIO_NSAMPLES; i += 2) {
+	for (uint_fast16_t i = 0; i < AUDIO_NSAMPLES; i++) {
 		update_len(c);
 
 		if (!c->enabled)
@@ -282,10 +281,9 @@ static void update_wave(int16_t *samples) {
 		if (c->muted)
 			continue;
 
-		sample /= 4;
+		sample /= 8;
 
-		samples[i + 0] += sample * c->on_left * vol_l;
-		samples[i + 1] += sample * c->on_right * vol_r;
+		samples[i] += sample * c->on_left * vol_l + sample * c->on_right * vol_r;
 	}
 }
 
@@ -308,7 +306,7 @@ static void update_noise(int16_t *samples) {
 	if (c->freq >= 14)
 		c->enabled = 0;
 
-	for (uint_fast16_t i = 0; i < AUDIO_NSAMPLES; i += 2) {
+	for (uint_fast16_t i = 0; i < AUDIO_NSAMPLES; i++) {
 		update_len(c);
 
 		if (!c->enabled)
@@ -345,10 +343,9 @@ static void update_noise(int16_t *samples) {
 
 		sample += c->val;
 		sample *= c->volume;
-		sample /= 4;
+		sample /= 8;
 
-		samples[i + 0] += sample * c->on_left * vol_l;
-		samples[i + 1] += sample * c->on_right * vol_r;
+		samples[i] += sample * c->on_left * vol_l + sample * c->on_right * vol_r;
 	}
 }
 
