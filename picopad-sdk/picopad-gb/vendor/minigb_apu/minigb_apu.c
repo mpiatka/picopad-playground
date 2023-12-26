@@ -214,7 +214,7 @@ static int32_t get_square(struct chan *c, const bool ch2){
         return sample;
 }
 
-static void update_square(int16_t *samples, const bool ch2) {
+static void update_square(const bool ch2) {
 	uint32_t freq;
 	struct chan *c = chans + ch2;
 
@@ -224,10 +224,6 @@ static void update_square(int16_t *samples, const bool ch2) {
 	freq = DMG_CLOCK_FREQ_U / ((2048 - c->freq) << 5);
 	set_note_freq(c, freq);
 	c->freq_inc *= 8;
-
-	for (uint_fast16_t i = 0; i < AUDIO_NSAMPLES; i++) {
-		samples[i] += get_square(c, ch2);
-	}
 }
 
 
@@ -285,7 +281,7 @@ static int32_t get_wave(struct chan *c){
 }
 
 
-static void update_wave(int16_t *samples) {
+static void update_wave() {
 	uint32_t freq;
 	struct chan *c = chans + 2;
 
@@ -296,10 +292,6 @@ static void update_wave(int16_t *samples) {
 	set_note_freq(c, freq);
 
 	c->freq_inc *= 32;
-
-	for (uint_fast16_t i = 0; i < AUDIO_NSAMPLES; i++) {
-		samples[i] += get_wave(c);
-	}
 }
 
 static int32_t get_noise(struct chan *c){
@@ -344,7 +336,7 @@ static int32_t get_noise(struct chan *c){
         return sample * c->on_left * vol_l + sample * c->on_right * vol_r;
 }
 
-static void update_noise(int16_t *samples) {
+static void update_noise() {
 	struct chan *c = chans + 3;
 
 	if (!c->powered)
@@ -362,25 +354,32 @@ static void update_noise(int16_t *samples) {
 
 	if (c->freq >= 14)
 		c->enabled = 0;
-
-	for (uint_fast16_t i = 0; i < AUDIO_NSAMPLES; i++) {
-		samples[i] += get_noise(c);
-	}
 }
 
 /**
  * SDL2 style audio callback function.
  */
-void audio_callback(void *userdata, int16_t *stream, size_t len) {
+void audio_callback(void *userdata, uint8_t *stream, size_t len) {
 	/* Appease unused variable warning. */
 	(void) userdata;
 
-	memset(stream, 0, len);
+	update_square(0);
+	update_square(1);
+	update_wave();
+	update_noise();
 
-	update_square(stream, 0);
-	update_square(stream, 1);
-	update_wave(stream);
-	update_noise(stream);
+        for(int i = 0; i < len; i++){
+                int32_t sample = 0;
+                sample += get_square(chans, 0);
+                sample += get_square(chans + 1, 1);
+                sample += get_wave(chans + 2);
+                sample += get_noise(chans + 3);
+
+                // Clip the value to the range of a 8-bit unsigned integer
+                sample += -INT16_MIN;
+                sample = MIN(sample, UINT16_MAX);
+                stream[i] = sample >> 8;
+        }
 }
 
 static void chan_trigger(uint_fast8_t i) {

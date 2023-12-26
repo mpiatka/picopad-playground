@@ -49,8 +49,9 @@
 
 #if ENABLE_SOUND
 PioaudioCtx pioaudioCtx;
-int16_t *stream;
-alignas(4) uint8_t monoStream[AUDIO_SAMPLES];
+alignas(4) uint8_t monoStream1[AUDIO_SAMPLES];
+alignas(4) uint8_t monoStream2[AUDIO_SAMPLES];
+uint8_t audio_buf_count = 0;
 float volume = 0.25f;
 #endif
 // ROM data
@@ -258,12 +259,6 @@ int main() {
     // Initialize the Picopad device
     DeviceInit(true, false);
 
-#if ENABLE_SOUND
-    stream = static_cast<int16_t *>(malloc(AUDIO_BUFFER_SIZE_BYTES));
-    assert(stream != nullptr);
-    memset(stream, 0, AUDIO_BUFFER_SIZE_BYTES);  // Zero out the stream buffer
-#endif
-
     // Main game loop
     while (true) {
         DrawClear(COL_BLACK);
@@ -312,19 +307,11 @@ int main() {
 
 #if ENABLE_SOUND
             if (true) {
-				audio_callback(nullptr, stream, AUDIO_BUFFER_SIZE_BYTES);
-
-				pioaudio_wait(&pioaudioCtx);
-				for (int i = 0; i < AUDIO_SAMPLES; i++) {
-					// Convert to mono 16bit and apply gain factor
-					int32_t monoSample = stream[i];
-					// Clip the value to the range of a 8-bit unsigned integer
-					monoSample += -INT16_MIN;
-					monoSample = MIN(monoSample, UINT16_MAX);
-					monoStream[i] = static_cast<uint8_t>(monoSample >> 8);
-				}
-				pioaudio_play(&pioaudioCtx, monoStream, AUDIO_SAMPLES);
-		}
+				auto buf = (audio_buf_count & 1) ? monoStream1 : monoStream2;
+				audio_callback(nullptr, buf, AUDIO_SAMPLES);
+				pioaudio_play(&pioaudioCtx, buf, AUDIO_SAMPLES);
+				audio_buf_count++;
+            }
 #endif
             // Update gamepad state
             prevGamepadState.up = gbContext.direct.joypad_bits.up;

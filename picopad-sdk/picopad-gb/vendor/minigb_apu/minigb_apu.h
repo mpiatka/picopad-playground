@@ -23,10 +23,10 @@ extern "C" {
 #define AUDIO_BUFFER_SIZE_BYTES (AUDIO_SAMPLES*2)
 
 /**
- * Fill allocated buffer "data" with "len" number of 32-bit floating point
- * samples (native endian order) in stereo interleaved format.
+ * Fill allocated buffer "data" with "len" number of 8-bit unsigned
+ * samples in mono
  */
-void audio_callback(void *ptr, int16_t *data, size_t len);
+void audio_callback(void *ptr, uint8_t *data, size_t len);
 
 /**
  * Read audio register at given address "addr".
