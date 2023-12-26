@@ -13,7 +13,7 @@ extern "C" {
 
 #include <stdint.h>
 
-#define AUDIO_SAMPLE_RATE  34250
+#define AUDIO_SAMPLE_RATE  31250
 
 #define DMG_CLOCK_FREQ    4194304.0
 #define SCREEN_REFRESH_CYCLES  70224.0
