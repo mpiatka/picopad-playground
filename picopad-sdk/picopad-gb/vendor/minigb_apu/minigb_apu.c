@@ -178,6 +178,42 @@ static void update_sweep(struct chan *c) {
 	}
 }
 
+static int32_t get_square(struct chan *c, const bool ch2){
+        int32_t sample = 0;
+
+        update_len(c);
+
+        if (!c->enabled)
+                return 0;
+
+        update_env(c);
+        if (!ch2)
+                update_sweep(c);
+
+        uint32_t pos = 0;
+        uint32_t prev_pos = 0;
+
+        while (update_freq(c, &pos)) {
+                c->square.duty_counter = (c->square.duty_counter + 1) & 7;
+                sample += ((pos - prev_pos) / c->freq_inc) * c->val;
+                c->val = (c->square.duty & (1 << c->square.duty_counter)) ?
+                        VOL_INIT_MAX / MAX_CHAN_VOLUME :
+                        VOL_INIT_MIN / MAX_CHAN_VOLUME;
+                prev_pos = pos;
+        }
+
+        if (c->muted)
+                return 0;
+
+        sample += c->val;
+        sample *= c->volume;
+        sample /= 8;
+
+        sample = sample * c->on_left * vol_l + sample * c->on_right * vol_r;
+
+        return sample;
+}
+
 static void update_square(int16_t *samples, const bool ch2) {
 	uint32_t freq;
 	struct chan *c = chans + ch2;
@@ -190,38 +226,10 @@ static void update_square(int16_t *samples, const bool ch2) {
 	c->freq_inc *= 8;
 
 	for (uint_fast16_t i = 0; i < AUDIO_NSAMPLES; i++) {
-		update_len(c);
-
-		if (!c->enabled)
-			continue;
-
-		update_env(c);
-		if (!ch2)
-			update_sweep(c);
-
-		uint32_t pos = 0;
-		uint32_t prev_pos = 0;
-		int32_t sample = 0;
-
-		while (update_freq(c, &pos)) {
-			c->square.duty_counter = (c->square.duty_counter + 1) & 7;
-			sample += ((pos - prev_pos) / c->freq_inc) * c->val;
-			c->val = (c->square.duty & (1 << c->square.duty_counter)) ?
-							 VOL_INIT_MAX / MAX_CHAN_VOLUME :
-							 VOL_INIT_MIN / MAX_CHAN_VOLUME;
-			prev_pos = pos;
-		}
-
-		if (c->muted)
-			continue;
-
-		sample += c->val;
-		sample *= c->volume;
-		sample /= 8;
-
-		samples[i] += sample * c->on_left * vol_l + sample * c->on_right * vol_r;
+		samples[i] += get_square(c, ch2);
 	}
 }
+
 
 static uint8_t wave_sample(const unsigned int pos, const unsigned int volume) {
 	uint8_t sample;
@@ -234,6 +242,48 @@ static uint8_t wave_sample(const unsigned int pos, const unsigned int volume) {
 	}
 	return volume ? (sample >> (volume - 1)) : 0;
 }
+
+static int32_t get_wave(struct chan *c){
+        update_len(c);
+
+        if (!c->enabled)
+                return 0;
+
+        uint32_t pos = 0;
+        uint32_t prev_pos = 0;
+        int32_t sample = 0;
+
+        c->wave.sample = wave_sample(c->val, c->volume);
+
+        while (update_freq(c, &pos)) {
+                c->val = (c->val + 1) & 31;
+                sample += ((pos - prev_pos) / c->freq_inc) *
+                        ((int) c->wave.sample - 8) * (INT16_MAX / 64);
+                c->wave.sample = wave_sample(c->val, c->volume);
+                prev_pos = pos;
+        }
+
+        if (c->volume == 0)
+                return 0;
+
+        if (c->muted)
+                return 0;
+
+
+        sample += ((int) c->wave.sample - 8) * (int) (INT16_MAX / 64);
+
+        {
+                /* First element is unused. */
+                int16_t div[] = {INT16_MAX, 1, 2, 4};
+                sample = sample / (div[c->volume]);
+        }
+
+
+        sample /= 8;
+
+        return sample * c->on_left * vol_l + sample * c->on_right * vol_r;
+}
+
 
 static void update_wave(int16_t *samples) {
 	uint32_t freq;
@@ -248,43 +298,50 @@ static void update_wave(int16_t *samples) {
 	c->freq_inc *= 32;
 
 	for (uint_fast16_t i = 0; i < AUDIO_NSAMPLES; i++) {
-		update_len(c);
-
-		if (!c->enabled)
-			continue;
-
-		uint32_t pos = 0;
-		uint32_t prev_pos = 0;
-		int32_t sample = 0;
-
-		c->wave.sample = wave_sample(c->val, c->volume);
-
-		while (update_freq(c, &pos)) {
-			c->val = (c->val + 1) & 31;
-			sample += ((pos - prev_pos) / c->freq_inc) *
-								((int) c->wave.sample - 8) * (INT16_MAX / 64);
-			c->wave.sample = wave_sample(c->val, c->volume);
-			prev_pos = pos;
-		}
-
-		sample += ((int) c->wave.sample - 8) * (int) (INT16_MAX / 64);
-
-		if (c->volume == 0)
-			continue;
-
-		{
-			/* First element is unused. */
-			int16_t div[] = {INT16_MAX, 1, 2, 4};
-			sample = sample / (div[c->volume]);
-		}
-
-		if (c->muted)
-			continue;
-
-		sample /= 8;
-
-		samples[i] += sample * c->on_left * vol_l + sample * c->on_right * vol_r;
+		samples[i] += get_wave(c);
 	}
+}
+
+static int32_t get_noise(struct chan *c){
+        update_len(c);
+
+        if (!c->enabled)
+                return 0;
+
+        update_env(c);
+
+        uint32_t pos = 0;
+        uint32_t prev_pos = 0;
+        int32_t sample = 0;
+
+        while (update_freq(c, &pos)) {
+                c->noise.lfsr_reg = (c->noise.lfsr_reg << 1) |
+                        (c->val >= VOL_INIT_MAX / MAX_CHAN_VOLUME);
+
+                if (c->noise.lfsr_wide) {
+                        c->val = !(((c->noise.lfsr_reg >> 14) & 1) ^
+                                        ((c->noise.lfsr_reg >> 13) & 1)) ?
+                                VOL_INIT_MAX / MAX_CHAN_VOLUME :
+                                VOL_INIT_MIN / MAX_CHAN_VOLUME;
+                } else {
+                        c->val = !(((c->noise.lfsr_reg >> 6) & 1) ^
+                                        ((c->noise.lfsr_reg >> 5) & 1)) ?
+                                VOL_INIT_MAX / MAX_CHAN_VOLUME :
+                                VOL_INIT_MIN / MAX_CHAN_VOLUME;
+                }
+
+                sample += ((pos - prev_pos) / c->freq_inc) * c->val;
+                prev_pos = pos;
+        }
+
+        if (c->muted)
+                return 0;
+
+        sample += c->val;
+        sample *= c->volume;
+        sample /= 8;
+
+        return sample * c->on_left * vol_l + sample * c->on_right * vol_r;
 }
 
 static void update_noise(int16_t *samples) {
@@ -307,45 +364,7 @@ static void update_noise(int16_t *samples) {
 		c->enabled = 0;
 
 	for (uint_fast16_t i = 0; i < AUDIO_NSAMPLES; i++) {
-		update_len(c);
-
-		if (!c->enabled)
-			continue;
-
-		update_env(c);
-
-		uint32_t pos = 0;
-		uint32_t prev_pos = 0;
-		int32_t sample = 0;
-
-		while (update_freq(c, &pos)) {
-			c->noise.lfsr_reg = (c->noise.lfsr_reg << 1) |
-													(c->val >= VOL_INIT_MAX / MAX_CHAN_VOLUME);
-
-			if (c->noise.lfsr_wide) {
-				c->val = !(((c->noise.lfsr_reg >> 14) & 1) ^
-									 ((c->noise.lfsr_reg >> 13) & 1)) ?
-								 VOL_INIT_MAX / MAX_CHAN_VOLUME :
-								 VOL_INIT_MIN / MAX_CHAN_VOLUME;
-			} else {
-				c->val = !(((c->noise.lfsr_reg >> 6) & 1) ^
-									 ((c->noise.lfsr_reg >> 5) & 1)) ?
-								 VOL_INIT_MAX / MAX_CHAN_VOLUME :
-								 VOL_INIT_MIN / MAX_CHAN_VOLUME;
-			}
-
-			sample += ((pos - prev_pos) / c->freq_inc) * c->val;
-			prev_pos = pos;
-		}
-
-		if (c->muted)
-			continue;
-
-		sample += c->val;
-		sample *= c->volume;
-		sample /= 8;
-
-		samples[i] += sample * c->on_left * vol_l + sample * c->on_right * vol_r;
+		samples[i] += get_noise(c);
 	}
 }
 
