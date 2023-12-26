@@ -46,11 +46,13 @@
 #define GPIO_BUTTON_B         6 // B
 #define GPIO_BUTTON_SELECT    8 // Y
 #define GPIO_BUTTON_START     9 // X
+								//
+#define SAMPLES_PER_FRAME (172 * 4) //Need buffer divisible by 4, slowed by 20%
 
 #if ENABLE_SOUND
 PioaudioCtx pioaudioCtx;
-alignas(4) uint8_t monoStream1[AUDIO_SAMPLES];
-alignas(4) uint8_t monoStream2[AUDIO_SAMPLES];
+alignas(4) uint8_t monoStream1[SAMPLES_PER_FRAME];
+alignas(4) uint8_t monoStream2[SAMPLES_PER_FRAME];
 uint8_t audio_buf_count = 0;
 float volume = 0.25f;
 #endif
@@ -308,8 +310,8 @@ int main() {
 #if ENABLE_SOUND
             if (true) {
 				auto buf = (audio_buf_count & 1) ? monoStream1 : monoStream2;
-				audio_callback(nullptr, buf, AUDIO_SAMPLES);
-				pioaudio_play(&pioaudioCtx, buf, AUDIO_SAMPLES);
+				audio_callback(nullptr, buf, SAMPLES_PER_FRAME);
+				pioaudio_play(&pioaudioCtx, buf, SAMPLES_PER_FRAME);
 				audio_buf_count++;
             }
 #endif
