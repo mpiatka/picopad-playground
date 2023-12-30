@@ -25,7 +25,7 @@ endif()
 
 pico_sdk_init()
 
-add_executable(${PROJECT_NAME} pioaudio/pioaudio.c vendor/minigb_apu/minigb_apu.c src/rom.c src/main.cpp)
+add_executable(${PROJECT_NAME} pioaudio/pioaudio.c vendor/minigb_apu/minigb_apu.c src/rom.c src/main.cpp src/ringbuf.c)
 
 target_include_directories(${PROJECT_NAME} PRIVATE vendor/minigb_apu)
 target_include_directories(${PROJECT_NAME} PRIVATE pioaudio)

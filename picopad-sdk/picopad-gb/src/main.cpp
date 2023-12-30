@@ -47,13 +47,10 @@
 #define GPIO_BUTTON_SELECT    8 // Y
 #define GPIO_BUTTON_START     9 // X
 								//
-#define SAMPLES_PER_FRAME (172 * 4) //Need buffer divisible by 4, slowed by 20%
+#define SAMPLES_PER_FRAME (/*172 * */4) //Need buffer divisible by 4, slowed by 20%
 
 #if ENABLE_SOUND
 PioaudioCtx pioaudioCtx;
-alignas(4) uint8_t monoStream1[SAMPLES_PER_FRAME];
-alignas(4) uint8_t monoStream2[SAMPLES_PER_FRAME];
-uint8_t audio_buf_count = 0;
 float volume = 0.25f;
 #endif
 // ROM data
@@ -308,12 +305,26 @@ int main() {
             frameCount++;
 
 #if ENABLE_SOUND
-            if (true) {
-				auto buf = (audio_buf_count & 1) ? monoStream1 : monoStream2;
-				audio_callback(nullptr, buf, SAMPLES_PER_FRAME);
-				pioaudio_play(&pioaudioCtx, buf, SAMPLES_PER_FRAME);
-				audio_buf_count++;
-            }
+			auto ring = pioaudio_get_ring(&pioaudioCtx);
+			void *ptr1, *ptr2;
+			unsigned size1, size2;
+
+			do {
+				ringbufGetWritePtr(ring, &ptr1, &size1,
+						&ptr2, &size2);
+			} while(size1 + size2 < 448);
+
+			ringbufGetWritePtr(ring, &ptr1, &size1,
+					&ptr2, &size2);
+
+			audio_frame();
+
+			audio_callback(nullptr, (uint8_t *) ptr1, size1);
+			if(size2 > 0 && ptr2){
+				audio_callback(nullptr, (uint8_t *) ptr2, size2);
+			}
+
+			ringbufMoveWritePtr(ring, size1 + size2);
 #endif
             // Update gamepad state
             prevGamepadState.up = gbContext.direct.joypad_bits.up;

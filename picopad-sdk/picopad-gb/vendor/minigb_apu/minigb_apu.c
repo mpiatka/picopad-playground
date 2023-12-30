@@ -359,14 +359,17 @@ static void update_noise() {
 /**
  * SDL2 style audio callback function.
  */
-void audio_callback(void *userdata, uint8_t *stream, size_t len) {
-	/* Appease unused variable warning. */
-	(void) userdata;
 
+void audio_frame() {
 	update_square(0);
 	update_square(1);
 	update_wave();
 	update_noise();
+}
+
+void audio_callback(void *userdata, uint8_t *stream, size_t len) {
+	/* Appease unused variable warning. */
+	(void) userdata;
 
         for(int i = 0; i < len; i++){
                 int32_t sample = 0;

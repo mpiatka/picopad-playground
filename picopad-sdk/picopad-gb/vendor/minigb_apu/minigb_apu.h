@@ -13,7 +13,7 @@ extern "C" {
 
 #include <stdint.h>
 
-#define AUDIO_SAMPLE_RATE  31250
+#define AUDIO_SAMPLE_RATE  25000
 
 #define DMG_CLOCK_FREQ    4194304.0
 #define SCREEN_REFRESH_CYCLES  70224.0
@@ -26,6 +26,7 @@ extern "C" {
  * Fill allocated buffer "data" with "len" number of 8-bit unsigned
  * samples in mono
  */
+void audio_frame();
 void audio_callback(void *ptr, uint8_t *data, size_t len);
 
 /**

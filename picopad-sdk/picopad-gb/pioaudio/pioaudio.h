@@ -8,6 +8,7 @@ extern "C" {
 
 #include <hardware/pio.h>
 #include <hardware/dma.h>
+#include "../src/ringbuf.h"
 #define PIO_AUDIO_PIN 15;
 
 
@@ -16,7 +17,10 @@ struct PioaudioCtx{
 	uint sm;
 
 	uint dma_ch;
+    Ringbuf ring;
 };
+
+inline Ringbuf *pioaudio_get_ring(struct PioaudioCtx *c) { return &c->ring; }
 
 void pioaudio_init(struct PioaudioCtx *c);
 
